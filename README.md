@@ -2,10 +2,6 @@
 
 Selamat datang di Aplikasi To-Do List berbasis Command-Line (CLI)\! Ini adalah sebuah proyek sederhana yang dibuat dengan Python, dirancang untuk membantu Anda mengelola tugas harian langsung dari terminal. Aplikasi ini sangat cocok bagi developer pemula yang ingin memahami konsep dasar Python seperti manipulasi data, input/output, penggunaan modul eksternal, dan persistensi data.
 
-\<p align="center"\>
-\<img src="[https://i.imgur.com/u1w5S2X.png](https://www.google.com/search?q=https://i.imgur.com/u1w5S2X.png)" alt="Screenshot Aplikasi To-Do List" width="700"/\>
-\</p\>
-
 -----
 
 ### navigasi
