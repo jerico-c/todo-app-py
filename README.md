@@ -172,11 +172,4 @@ Proyek ini masih bisa dikembangkan lebih lanjut\! Berikut adalah beberapa ide un
   - [ ] **Antarmuka Web**: Membuat versi web dari aplikasi ini menggunakan framework seperti Flask atau FastAPI.
   - [ ] **Paket Instalasi**: Mengemas aplikasi menjadi paket Python yang dapat diinstal melalui `pip`.
 
-Merasa tertantang? Kontribusi sangat diterima\!
-
-## 📜 Lisensi
-
-Proyek ini dilisensikan di bawah **MIT License**. Lihat file `LICENSE` untuk detail lebih lanjut.
-
------
 
