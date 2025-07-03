@@ -1,7 +1,3 @@
-Tentu, ini adalah `README.md` yang telah diperbarui untuk mencerminkan versi terbaru dari aplikasi Anda (v2.2), lengkap dengan fitur **Prioritas** dan **Tanggal Jatuh Tempo**.
-
------
-
 # Aplikasi To-Do List CLI v2.2
 
 Selamat datang di Aplikasi To-Do List berbasis Command-Line (CLI)\! Ini adalah sebuah proyek sederhana yang dibuat dengan Python, dirancang untuk membantu Anda mengelola tugas harian langsung dari terminal. Aplikasi ini sangat cocok bagi developer pemula yang ingin memahami konsep dasar Python seperti manipulasi data, input/output, penggunaan modul eksternal, dan persistensi data.
