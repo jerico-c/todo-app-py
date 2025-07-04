@@ -177,7 +177,7 @@ Proyek ini masih bisa dikembangkan lebih lanjut\! Berikut adalah beberapa ide un
 
   - [x] **Prioritas Tugas**: Menambahkan level prioritas (misal: Rendah, Sedang, Tinggi) pada setiap tugas.
   - [x] **Tanggal Jatuh Tempo**: Menambahkan fungsionalitas tanggal dan waktu jatuh tempo.
-  - [ ] **Sub-Tugas**: Kemampuan untuk menambahkan "sub-tugas" atau *checklist* di dalam sebuah tugas utama.
+  - [x] **Sub-Tugas**: Kemampuan untuk menambahkan "sub-tugas" atau *checklist* di dalam sebuah tugas utama.
   - [ ] **Unit Tests**: Menulis pengujian otomatis menggunakan `pytest` untuk memastikan setiap fungsi bekerja dengan benar.
   - [ ] **Database**: Migrasi dari file JSON ke database yang lebih kuat seperti SQLite untuk skalabilitas yang lebih baik.
   - [ ] **Antarmuka Web**: Membuat versi web dari aplikasi ini menggunakan framework seperti Flask atau FastAPI.
