@@ -50,7 +50,7 @@ Ikuti langkah-langkah berikut untuk menjalankan aplikasi di komputer Anda:
 
     ```bash
     git clone https://github.com/jerico-c/todo-app-py.git
-    cd todo-list-cli
+    cd todo-app-py
     ```
 
 2.  **(Opsional, Sangat Direkomendasikan) Buat Virtual Environment**
