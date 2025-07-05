@@ -49,7 +49,7 @@ Ikuti langkah-langkah berikut untuk menjalankan aplikasi di komputer Anda:
     Buka terminal Anda dan clone repositori ini (atau cukup unduh dan ekstrak file `.py`).
 
     ```bash
-    git clone https://github.com/nama-anda/todo-list-cli.git
+    git clone https://github.com/jerico-c/todo-app-py.git
     cd todo-list-cli
     ```
 
