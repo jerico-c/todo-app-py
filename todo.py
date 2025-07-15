@@ -1,49 +1,103 @@
-import json
+import sqlite3
 import os
 from datetime import datetime
 from dateutil import parser
 from rich.console import Console
 from rich.table import Table
+import json # Hanya untuk migrasi
 
-# Inisialisasi
+# --- Inisialisasi Global ---
 console = Console()
-NAMA_FILE = "tasks_data.json"
-data = {"tasks": [], "next_id": 1}
+NAMA_DB = "todo_app.db"
+JSON_LAMA = "tasks_data.json"
 
-def muat_data():
-    """Memuat data dan memastikan kompatibilitas dengan field baru."""
-    global data
-    if os.path.exists(NAMA_FILE):
-        try:
-            with open(NAMA_FILE, 'r') as f:
-                loaded_data = json.load(f)
-                # Kompatibilitas untuk data lama
-                for task in loaded_data.get("tasks", []):
-                    task.setdefault("priority", "Sedang")
-                    task.setdefault("due_date", None)
-                    task.setdefault("subtasks", []) # <-- KOMPATIBILITAS BARU
-                data = loaded_data
-        except (json.JSONDecodeError, KeyError):
-            console.print("[bold red]File data rusak! Membuat file baru.[/bold red]")
-            data = {"tasks": [], "next_id": 1}
+# --- Fungsi Database ---
+def get_db_connection():
+    """Membuat dan mengembalikan koneksi ke database."""
+    conn = sqlite3.connect(NAMA_DB)
+    conn.row_factory = sqlite3.Row # Mengembalikan baris sebagai dictionary
+    return conn
 
-def simpan_data():
-    """Menyimpan state aplikasi ke file JSON."""
-    with open(NAMA_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+def init_db():
+    """Membuat tabel database jika belum ada."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # Tabel tugas utama
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            priority TEXT DEFAULT 'Sedang' CHECK(priority IN ('Rendah', 'Sedang', 'Tinggi')),
+            status TEXT DEFAULT 'Belum Selesai' CHECK(status IN ('Belum Selesai', 'Selesai')),
+            due_date TEXT
+        )
+    ''')
+    # Tabel sub-tugas
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS subtasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            status TEXT DEFAULT 'Belum Selesai' CHECK(status IN ('Belum Selesai', 'Selesai')),
+            FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE CASCADE
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-def tampilkan_tugas(list_tugas=None, judul_tabel="Daftar Tugas Anda"):
-    """Menampilkan tugas dalam tabel, kini dengan kolom progress Sub-Tugas."""
-    tasks_to_show = list_tugas if list_tugas is not None else data['tasks']
+def migrasi_dari_json():
+    """Fungsi sekali jalan untuk memigrasikan data dari JSON ke SQLite."""
+    if os.path.exists(JSON_LAMA) and os.path.getsize(NAMA_DB) == 0:
+        console.print(f"[yellow]Mendeteksi file '{JSON_LAMA}'. Memulai migrasi data ke SQLite...[/yellow]")
+        with open(JSON_LAMA, 'r') as f:
+            data_lama = json.load(f)
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        for task in data_lama.get("tasks", []):
+            cursor.execute(
+                "INSERT INTO tasks (title, description, priority, status, due_date) VALUES (?, ?, ?, ?, ?)",
+                (task.get('title', ''), task.get('description', ''), task.get('priority', 'Sedang'), task.get('status', 'Belum Selesai'), task.get('due_date'))
+            )
+            task_id_baru = cursor.lastrowid
+            for subtask in task.get("subtasks", []):
+                cursor.execute(
+                    "INSERT INTO subtasks (task_id, title, status) VALUES (?, ?, ?)",
+                    (task_id_baru, subtask['title'], subtask['status'])
+                )
+        
+        conn.commit()
+        conn.close()
+        os.rename(JSON_LAMA, JSON_LAMA + ".migrated")
+        console.print("[bold green]✓ Migrasi data berhasil![/bold green]")
+
+# --- Fungsi Tampilan ---
+def tampilkan_tugas(where_clause="", params=(), order_by="ORDER BY id ASC", judul_tabel="Daftar Tugas Anda"):
+    """Menampilkan tugas dari database dengan query yang fleksibel."""
+    conn = get_db_connection()
+    query = f'''
+        SELECT 
+            t.id, t.title, t.priority, t.due_date, t.status,
+            (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id) AS total_sub,
+            (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id AND s.status = 'Selesai') AS selesai_sub
+        FROM tasks t
+        {where_clause}
+        {order_by}
+    '''
+    tasks = conn.execute(query, params).fetchall()
+    conn.close()
+
     console.print(f"\n--- [bold cyan]{judul_tabel}[/bold cyan] ---")
-    if not tasks_to_show:
+    if not tasks:
         console.print("[yellow]Tidak ada tugas untuk ditampilkan.[/yellow]")
         return
 
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("ID", style="dim", width=5)
     table.add_column("Judul Tugas", min_width=20)
-    table.add_column("Sub-Tugas", width=12, justify="center") # <-- KOLOM BARU
+    table.add_column("Sub-Tugas", width=12, justify="center")
     table.add_column("Prioritas", min_width=10)
     table.add_column("Jatuh Tempo", min_width=18)
     table.add_column("Status", min_width=15)
@@ -51,38 +105,71 @@ def tampilkan_tugas(list_tugas=None, judul_tabel="Daftar Tugas Anda"):
     priority_styles = {"Tinggi": "bold red", "Sedang": "yellow", "Rendah": "green"}
     now = datetime.now()
 
-    for task in tasks_to_show:
-        # ... (logika status, prioritas, dan jatuh tempo tetap sama)
+    for task in tasks:
         status_style = "green" if task['status'] == 'Selesai' else "yellow"
-        priority = task.get("priority", "Sedang")
-        p_style = priority_styles.get(priority, "white")
-        due_date_str = task.get("due_date")
-        due_date_display, date_style = "N/A", "dim"
-        if due_date_str:
-            due_date = parser.parse(due_date_str)
-            due_date_display = due_date.strftime('%Y-%m-%d %H:%M')
-            if task['status'] != 'Selesai' and due_date < now: date_style = "bold red"
-            elif task['status'] != 'Selesai' and (due_date - now).days < 1: date_style = "bold yellow"
+        p_style = priority_styles.get(task['priority'], "white")
         
-        # Logika untuk menampilkan progress sub-tugas
-        subtasks = task.get("subtasks", [])
+        due_date_display, date_style = "N/A", "dim"
+        if task['due_date']:
+            due_date = parser.parse(task['due_date'])
+            due_date_display = due_date.strftime('%Y-%m-%d %H:%M')
+            if task['status'] != 'Selesai':
+                if due_date < now: date_style = "bold red"
+                elif (due_date - now).days < 1: date_style = "bold yellow"
+        
         sub_display = "-"
-        if subtasks:
-            selesai = sum(1 for st in subtasks if st['status'] == 'Selesai')
-            total = len(subtasks)
-            emoji = "✅" if selesai == total else "📝"
-            sub_display = f"{emoji} {selesai}/{total}"
+        if task['total_sub'] > 0:
+            emoji = "✅" if task['selesai_sub'] == task['total_sub'] else "📝"
+            sub_display = f"{emoji} {task['selesai_sub']}/{task['total_sub']}"
         
         table.add_row(
-            str(task['id']), task['title'], sub_display, # <-- DATA BARU
-            f"[{p_style}]{priority}[/{p_style}]", f"[{date_style}]{due_date_display}[/{date_style}]",
+            str(task['id']), task['title'], sub_display,
+            f"[{p_style}]{task['priority']}[/{p_style}]", f"[{date_style}]{due_date_display}[/{date_style}]",
             f"[{status_style}]{task['status']}[/{status_style}]"
         )
-    
     console.print(table)
 
+# --- Fungsi Helper Input ---
+def pilih_prioritas(prioritas_saat_ini=None):
+    """Fungsi bantuan untuk memilih prioritas dari menu."""
+    prompt = "Pilih Prioritas"
+    if prioritas_saat_ini:
+        prompt += f" (saat ini: [bold]{prioritas_saat_ini}[/bold], Enter untuk lewati)"
+    
+    console.print(prompt + ":")
+    console.print("1. Rendah\n2. Sedang\n3. Tinggi")
+    
+    map_pilihan = {'1': 'Rendah', '2': 'Sedang', '3': 'Tinggi'}
+    while True:
+        pilihan = input("Pilihan Anda (1-3): ").strip()
+        if pilihan in map_pilihan: return map_pilihan[pilihan]
+        if prioritas_saat_ini and pilihan == '': return prioritas_saat_ini
+        console.print("[red]Pilihan tidak valid. Harap masukkan 1, 2, atau 3.[/red]")
+
+def get_due_date_input(due_date_saat_ini=None):
+    """Fungsi bantuan untuk mendapatkan input tanggal jatuh tempo."""
+    prompt = "Masukkan Tanggal Jatuh Tempo"
+    if due_date_saat_ini:
+        try:
+            current_dt = parser.parse(due_date_saat_ini).strftime('%Y-%m-%d %H:%M')
+            prompt += f" (saat ini: [bold]{current_dt}[/bold])"
+        except (parser.ParserError, TypeError):
+            prompt += " (saat ini: tidak valid)"
+    
+    console.print(prompt + ":")
+    console.print("Format: YYYY-MM-DD HH:MM (waktu opsional). Kosongkan untuk hapus/lewati.")
+    
+    while True:
+        user_input = input("> ").strip()
+        if not user_input: return due_date_saat_ini
+        try:
+            return parser.parse(user_input).isoformat()
+        except parser.ParserError:
+            console.print("[red]Format tanggal tidak valid. Silakan coba lagi.[/red]")
+
+# --- Fungsi Logika Utama ---
 def tambah_tugas():
-    """Menambahkan tugas baru, diinisialisasi dengan list sub-tugas kosong."""
+    """Menambahkan tugas baru ke database."""
     console.print("\n--- [bold green]Tambah Tugas Baru[/bold green] ---")
     title = ""
     while not title:
@@ -93,110 +180,170 @@ def tambah_tugas():
     priority = pilih_prioritas()
     due_date = get_due_date_input()
 
-    new_task = {
-        "id": data['next_id'], "title": title, "description": description,
-        "priority": priority, "status": "Belum Selesai", "due_date": due_date,
-        "subtasks": [] # <-- FIELD BARU
-    }
-    data['tasks'].append(new_task)
-    data['next_id'] += 1
-    simpan_data()
+    conn = get_db_connection()
+    conn.execute(
+        "INSERT INTO tasks (title, description, priority, due_date) VALUES (?, ?, ?, ?)",
+        (title, description, priority, due_date)
+    )
+    conn.commit()
+    conn.close()
     console.print(f"\n[bold green]✓ Tugas '[white]{title}[/white]' berhasil ditambahkan![/bold green]")
 
-def kelola_sub_tugas():
-    """Menu utama untuk semua operasi yang berhubungan dengan sub-tugas."""
+def edit_tugas():
+    """Mengedit tugas yang ada di database."""
     tampilkan_tugas()
-    if not data['tasks']: return
-
     try:
-        id_to_manage = int(input("Masukkan ID tugas utama yang ingin dikelola sub-tugasnya: "))
-        main_task = next((task for task in data['tasks'] if task['id'] == id_to_manage), None)
+        id_to_edit = int(input("Masukkan ID tugas yang ingin diedit: "))
+        conn = get_db_connection()
+        task_to_edit = conn.execute("SELECT * FROM tasks WHERE id = ?", (id_to_edit,)).fetchone()
+        
+        if task_to_edit:
+            console.print(f"\nMengedit tugas: [bold yellow]'{task_to_edit['title']}'[/bold yellow]")
+            
+            new_title = input(f"Judul baru ({task_to_edit['title']}): ").strip() or task_to_edit['title']
+            new_desc = input(f"Deskripsi baru ({task_to_edit['description']}): ").strip() or task_to_edit['description']
+            new_priority = pilih_prioritas(task_to_edit['priority'])
+            new_due_date = get_due_date_input(task_to_edit['due_date'])
+            
+            conn.execute(
+                "UPDATE tasks SET title = ?, description = ?, priority = ?, due_date = ? WHERE id = ?",
+                (new_title, new_desc, new_priority, new_due_date, id_to_edit)
+            )
+            conn.commit()
+            console.print(f"\n[bold green]✓ Tugas dengan ID {id_to_edit} berhasil diperbarui.[/bold green]")
+        else:
+            console.print(f"[bold red]Tugas dengan ID {id_to_edit} tidak ditemukan.[/bold red]")
+        conn.close()
+    except ValueError:
+        console.print("[bold red]Input tidak valid.[/bold red]")
+
+def kelola_sub_tugas():
+    """Menu untuk mengelola sub-tugas dari sebuah tugas utama."""
+    tampilkan_tugas()
+    try:
+        id_to_manage = int(input("Masukkan ID tugas utama yang ingin dikelola: "))
+        conn = get_db_connection()
+        main_task = conn.execute("SELECT id, title FROM tasks WHERE id = ?", (id_to_manage,)).fetchone()
 
         if not main_task:
             console.print(f"[bold red]Tugas dengan ID {id_to_manage} tidak ditemukan.[/bold red]")
+            conn.close()
             return
-
+        
         while True:
             console.print(f"\n--- Mengelola Sub-Tugas untuk: [bold yellow]'{main_task['title']}'[/bold yellow] ---")
-            subtasks = main_task.get("subtasks", [])
-            if not subtasks:
-                console.print("[yellow]Belum ada sub-tugas.[/yellow]")
+            subtasks = conn.execute("SELECT id, title, status FROM subtasks WHERE task_id = ? ORDER BY id", (id_to_manage,)).fetchall()
+            
+            if not subtasks: console.print("[yellow]Belum ada sub-tugas.[/yellow]")
             else:
                 for i, st in enumerate(subtasks):
                     emoji = "✅" if st['status'] == 'Selesai' else "📝"
                     console.print(f"{i+1}. {emoji} {st['title']}")
 
-            console.print("\n--- Menu Sub-Tugas ---")
-            console.print("1. Tambah Sub-Tugas")
-            console.print("2. Tandai Sub-Tugas Selesai")
-            console.print("3. Hapus Sub-Tugas")
-            console.print("4. Kembali ke Menu Utama")
-            pilihan = input("Pilihan Anda (1-4): ")
+            console.print("\n[bold]Menu Sub-Tugas:[/bold] 1. Tambah | 2. Tandai Selesai | 3. Hapus | 4. Kembali")
+            pilihan = input("> ")
 
-            if pilihan == '1':
-                sub_title = input("Masukkan judul sub-tugas baru: ").strip()
-                if sub_title:
-                    main_task['subtasks'].append({"title": sub_title, "status": "Belum Selesai"})
-                    simpan_data()
-                    console.print("[green]Sub-tugas berhasil ditambahkan.[/green]")
-            elif pilihan == '2':
-                if not subtasks:
-                    console.print("[yellow]Tidak ada sub-tugas untuk ditandai.[/yellow]")
-                    continue
-                try:
-                    idx_to_mark = int(input(f"Masukkan nomor sub-tugas yang selesai (1-{len(subtasks)}): ")) - 1
-                    if 0 <= idx_to_mark < len(subtasks):
-                        subtasks[idx_to_mark]['status'] = 'Selesai'
-                        simpan_data()
-                        console.print("[green]Status sub-tugas diperbarui.[/green]")
-                    else:
-                        console.print("[red]Nomor tidak valid.[/red]")
-                except ValueError:
-                    console.print("[red]Input harus berupa angka.[/red]")
-            elif pilihan == '3':
-                if not subtasks:
-                    console.print("[yellow]Tidak ada sub-tugas untuk dihapus.[/yellow]")
-                    continue
-                try:
-                    idx_to_del = int(input(f"Masukkan nomor sub-tugas yang ingin dihapus (1-{len(subtasks)}): ")) - 1
-                    if 0 <= idx_to_del < len(subtasks):
-                        removed = subtasks.pop(idx_to_del)
-                        simpan_data()
-                        console.print(f"[green]Sub-tugas '[white]{removed['title']}[/white]' berhasil dihapus.[/green]")
-                    else:
-                        console.print("[red]Nomor tidak valid.[/red]")
-                except ValueError:
-                    console.print("[red]Input harus berupa angka.[/red]")
-            elif pilihan == '4':
-                break
-            else:
-                console.print("[red]Pilihan tidak valid.[/red]")
-
+            try:
+                if pilihan == '1':
+                    sub_title = input("Judul sub-tugas baru: ").strip()
+                    if sub_title:
+                        conn.execute("INSERT INTO subtasks (task_id, title) VALUES (?, ?)", (id_to_manage, sub_title))
+                        conn.commit()
+                elif pilihan == '2' and subtasks:
+                    idx = int(input(f"No. sub-tugas selesai (1-{len(subtasks)}): ")) - 1
+                    if 0 <= idx < len(subtasks):
+                        conn.execute("UPDATE subtasks SET status = 'Selesai' WHERE id = ?", (subtasks[idx]['id'],))
+                        conn.commit()
+                elif pilihan == '3' and subtasks:
+                    idx = int(input(f"No. sub-tugas hapus (1-{len(subtasks)}): ")) - 1
+                    if 0 <= idx < len(subtasks):
+                        conn.execute("DELETE FROM subtasks WHERE id = ?", (subtasks[idx]['id'],))
+                        conn.commit()
+                elif pilihan == '4':
+                    break
+            except (ValueError, IndexError):
+                console.print("[red]Input nomor tidak valid.[/red]")
+        conn.close()
     except ValueError:
-        console.print("[bold red]Input ID harus berupa angka.[/bold red]")
+        console.print("[red]Input ID harus berupa angka.[/red]")
 
+def tandai_selesai():
+    """Menandai tugas utama sebagai 'Selesai'."""
+    tampilkan_tugas("WHERE status = ?", ('Belum Selesai',), judul_tabel="Tugas yang Belum Selesai")
+    try:
+        id_to_mark = int(input("Masukkan ID tugas yang selesai: "))
+        conn = get_db_connection()
+        result = conn.execute("UPDATE tasks SET status = 'Selesai' WHERE id = ? AND status = 'Belum Selesai'", (id_to_mark,))
+        conn.commit()
+        conn.close()
+        if result.rowcount > 0:
+            console.print("[green]Tugas ditandai selesai.[/green]")
+        else:
+            console.print("[yellow]Tugas tidak ditemukan atau sudah selesai.[/yellow]")
+    except ValueError:
+        console.print("[red]Input ID harus berupa angka.[/red]")
+
+def hapus_tugas():
+    """Menghapus tugas utama (dan sub-tugasnya) dari database."""
+    tampilkan_tugas()
+    try:
+        id_to_delete = int(input("Masukkan ID tugas yang ingin dihapus: "))
+        conn = get_db_connection()
+        result = conn.execute("DELETE FROM tasks WHERE id = ?", (id_to_delete,))
+        conn.commit()
+        conn.close()
+        if result.rowcount > 0:
+            console.print(f"\n[bold green]✓ Tugas dengan ID {id_to_delete} berhasil dihapus.[/bold green]")
+        else:
+            console.print(f"[bold red]Tugas dengan ID {id_to_delete} tidak ditemukan.[/bold red]")
+    except ValueError:
+        console.print("[red]Input ID harus berupa angka.[/red]")
+
+def urutkan_tugas():
+    """Mengurutkan tugas menggunakan ORDER BY di SQL."""
+    console.print("\nUrutkan tugas berdasarkan:\n1. ID\n2. Judul\n3. Status\n4. Prioritas\n5. Jatuh Tempo")
+    pilihan = input("Pilihan Anda (1-5): ")
+    order_clause = ""
+    if pilihan == '1': order_clause = "ORDER BY id ASC"
+    elif pilihan == '2': order_clause = "ORDER BY title ASC"
+    elif pilihan == '3': order_clause = "ORDER BY status ASC"
+    elif pilihan == '4': order_clause = "ORDER BY CASE priority WHEN 'Tinggi' THEN 3 WHEN 'Sedang' THEN 2 WHEN 'Rendah' THEN 1 END DESC, id ASC"
+    elif pilihan == '5': order_clause = "ORDER BY due_date ASC, id ASC"
+    else: console.print("[red]Pilihan tidak valid.[/red]"); return
+    tampilkan_tugas(order_by=order_clause, judul_tabel="Tugas Terurut")
+
+def filter_tugas():
+    """Memfilter tugas menggunakan WHERE di SQL."""
+    console.print("\nTampilkan tugas dengan status:\n1. Selesai\n2. Belum Selesai")
+    pilihan = input("Pilihan Anda (1-2): ")
+    if pilihan == '1':
+        tampilkan_tugas("WHERE status = ?", ('Selesai',), judul_tabel="Tugas yang Sudah Selesai")
+    elif pilihan == '2':
+        tampilkan_tugas("WHERE status = ?", ('Belum Selesai',), judul_tabel="Tugas yang Belum Selesai")
+    else:
+        console.print("[red]Pilihan tidak valid.[/red]")
+
+# --- Fungsi Menu Utama ---
 def menu():
-    """Fungsi utama untuk menampilkan menu dan mengatur alur aplikasi."""
-    muat_data()
+    """Fungsi utama yang menjalankan aplikasi."""
+    init_db()
+    migrasi_dari_json()
+
     console.print("\n" + "="*46, style="bold blue")
-    console.print("   Selamat Datang di Aplikasi To-Do List v2.3", style="bold blue")
+    console.print("   Selamat Datang di Aplikasi To-Do List v2.4", style="bold blue")
+    console.print("         (Backend: Database SQLite)", style="blue")
     console.print("="*46, style="bold blue")
+    
+    actions = {'1': tampilkan_tugas, '2': tambah_tugas, '3': edit_tugas,
+               '4': kelola_sub_tugas, '5': tandai_selesai, '6': hapus_tugas,
+               '7': urutkan_tugas, '8': filter_tugas}
     
     while True:
         console.print("\n--- [bold]Menu Utama[/bold] ---")
-        menu_options = {
-            "1": "Lihat Semua Tugas", "2": "Tambah Tugas", "3": "Edit Tugas",
-            "4": "Kelola Sub-Tugas", # <-- MENU BARU
-            "5": "Tandai Tugas Selesai", "6": "Hapus Tugas", "7": "Urutkan Tugas",
-            "8": "Filter Tugas", "9": "Keluar"
-        }
-        for key, value in menu_options.items():
-            console.print(f"[cyan]{key}[/cyan]. {value}")
-
-        pilihan = input("Masukkan pilihan Anda (1-9): ")
-        actions = {'1': tampilkan_tugas, '2': tambah_tugas, '3': edit_tugas,
-                   '4': kelola_sub_tugas, '5': tandai_selesai, '6': hapus_tugas,
-                   '7': urutkan_tugas, '8': filter_tugas }
+        menu_options = { "1": "Lihat Tugas", "2": "Tambah Tugas", "3": "Edit Tugas", "4": "Kelola Sub-Tugas", "5": "Tandai Tugas Selesai", "6": "Hapus Tugas", "7": "Urutkan Tugas", "8": "Filter Tugas", "9": "Keluar" }
+        for k, v in menu_options.items(): console.print(f"[cyan]{k}[/cyan]. {v}")
+        
+        pilihan = input("Pilihan Anda (1-9): ")
         
         if pilihan in actions:
             actions[pilihan]()
@@ -204,115 +351,7 @@ def menu():
             console.print("\n[bold magenta]Terima kasih telah menggunakan aplikasi ini! Sampai jumpa![/bold magenta]")
             break
         else:
-            console.print("\n[bold red]Pilihan tidak valid. Silakan coba lagi.[/bold red]")
-
-# --- Fungsi-fungsi lain yang tidak berubah signifikan ---
-# (Fungsi-fungsi seperti edit_tugas, urutkan_tugas, pilih_prioritas, dll.
-#  bisa disalin dari kode versi sebelumnya)
-def get_due_date_input(due_date_saat_ini=None):
-    """Fungsi bantuan untuk mendapatkan input tanggal dan waktu jatuh tempo."""
-    display_current = ""
-    if due_date_saat_ini:
-        try:
-            current_dt = parser.parse(due_date_saat_ini).strftime('%Y-%m-%d %H:%M')
-            display_current = f" (saat ini: [bold]{current_dt}[/bold], kosongkan untuk hapus)"
-        except (parser.ParserError, TypeError):
-            display_current = " (saat ini: tidak valid)"      
-    console.print(f"Masukkan Tanggal Jatuh Tempo{display_current}:")
-    console.print("Format: YYYY-MM-DD HH:MM (waktu opsional). Contoh: 2024-12-31 atau 2024-12-31 17:00")
-    while True:
-        user_input = input("> ").strip()
-        if not user_input: return None if display_current.endswith("hapus)") else due_date_saat_ini
-        try:
-            dt_object = parser.parse(user_input)
-            return dt_object.isoformat()
-        except parser.ParserError: console.print("[red]Format tanggal tidak valid.[/red]")
-
-def pilih_prioritas(prioritas_saat_ini=None):
-    """Fungsi bantuan untuk memilih prioritas."""
-    console.print("Pilih Prioritas" + (f" (saat ini: [bold]{prioritas_saat_ini}[/bold])" if prioritas_saat_ini else "") + ":")
-    console.print("1. Rendah\n2. Sedang\n3. Tinggi")
-    map_pilihan = {'1': 'Rendah', '2': 'Sedang', '3': 'Tinggi'}
-    while True:
-        pilihan = input("Pilihan Anda (1-3): ").strip()
-        if pilihan in map_pilihan: return map_pilihan[pilihan]
-        if prioritas_saat_ini and pilihan == '': return prioritas_saat_ini
-        console.print("[red]Pilihan tidak valid.[/red]")
-
-def edit_tugas():
-    tampilkan_tugas()
-    if not data['tasks']: return
-    try:
-        id_to_edit = int(input("Masukkan ID tugas yang ingin diedit: "))
-        task_to_edit = next((task for task in data['tasks'] if task['id'] == id_to_edit), None)
-        if task_to_edit:
-            console.print(f"\nMengedit tugas: [bold yellow]'{task_to_edit['title']}'[/bold yellow]")
-            console.print("(Tekan Enter untuk melewati, tanpa mengubah nilai)")
-            new_title = input(f"Judul baru ({task_to_edit['title']}): ").strip()
-            if new_title: task_to_edit['title'] = new_title
-            new_desc = input(f"Deskripsi baru ({task_to_edit.get('description', '')}): ").strip()
-            if new_desc: task_to_edit['description'] = new_desc
-            task_to_edit['priority'] = pilih_prioritas(task_to_edit.get("priority", "Sedang"))
-            task_to_edit['due_date'] = get_due_date_input(task_to_edit.get("due_date"))
-            simpan_data()
-            console.print(f"\n[bold green]✓ Tugas dengan ID {id_to_edit} berhasil diperbarui.[/bold green]")
-        else: console.print(f"[bold red]Tugas dengan ID {id_to_edit} tidak ditemukan.[/bold red]")
-    except ValueError: console.print("[bold red]Input tidak valid.[/bold red]")
-
-def tandai_selesai():
-    """Menandai sebuah tugas utama sebagai 'Selesai'."""
-    tampilkan_tugas(list_tugas=[t for t in data['tasks'] if t['status'] == 'Belum Selesai'], judul_tabel="Tugas yang Belum Selesai")
-    if not any(t['status'] == 'Belum Selesai' for t in data['tasks']): return
-    try:
-        id_to_mark = int(input("Masukkan ID tugas yang ingin ditandai selesai: "))
-        task = next((t for t in data['tasks'] if t['id'] == id_to_mark), None)
-        if task:
-            if task['status'] == 'Selesai': console.print(f"[yellow]Tugas '{task['title']}' sudah selesai.[/yellow]")
-            else:
-                task['status'] = "Selesai"
-                simpan_data()
-                console.print(f"\n[bold green]✓ Tugas '[white]{task['title']}[/white]' telah ditandai selesai.[/bold green]")
-        else: console.print(f"[bold red]Tugas dengan ID {id_to_mark} tidak ditemukan.[/bold red]")
-    except ValueError: console.print("[bold red]Input ID harus berupa angka.[/bold red]")
-
-def hapus_tugas():
-    tampilkan_tugas()
-    if not data['tasks']: return
-    try:
-        id_to_delete = int(input("Masukkan ID tugas yang ingin dihapus: "))
-        task_to_remove = next((task for task in data['tasks'] if task['id'] == id_to_delete), None)
-        if task_to_remove:
-            data['tasks'].remove(task_to_remove)
-            simpan_data()
-            console.print(f"\n[bold green]✓ Tugas '[white]{task_to_remove['title']}[/white]' telah dihapus.[/bold green]")
-        else: console.print(f"[bold red]Tugas dengan ID {id_to_delete} tidak ditemukan.[/bold red]")
-    except ValueError: console.print("[bold red]Input ID harus berupa angka.[/bold red]")
-
-def urutkan_tugas():
-    if not data['tasks']: console.print("\n[yellow]Tidak ada tugas untuk diurutkan.[/yellow]"); return
-    console.print("\nUrutkan tugas berdasarkan:\n1. ID\n2. Judul\n3. Status\n4. Prioritas\n5. Jatuh Tempo")
-    pilihan = input("Pilihan Anda (1-5): ")
-    judul = "Tugas Terurut"
-    if pilihan == '1': sorted_tasks = sorted(data['tasks'], key=lambda x: x['id'])
-    elif pilihan == '2': sorted_tasks = sorted(data['tasks'], key=lambda x: x['title'].lower())
-    elif pilihan == '3': sorted_tasks = sorted(data['tasks'], key=lambda x: x['status'])
-    elif pilihan == '4':
-        priority_map = {"Tinggi": 3, "Sedang": 2, "Rendah": 1}
-        sorted_tasks = sorted(data['tasks'], key=lambda x: priority_map.get(x.get('priority', 'Sedang'), 0), reverse=True)
-    elif pilihan == '5':
-        max_date = datetime.max
-        sorted_tasks = sorted(data['tasks'], key=lambda x: parser.parse(x['due_date']) if x['due_date'] else max_date)
-    else: console.print("[red]Pilihan tidak valid.[/red]"); return
-    tampilkan_tugas(list_tugas=sorted_tasks, judul_tabel=judul)
-
-def filter_tugas():
-    if not data['tasks']: console.print("\n[yellow]Tidak ada tugas untuk difilter.[/yellow]"); return
-    console.print("\nTampilkan tugas dengan status:\n1. Selesai\n2. Belum Selesai")
-    pilihan = input("Pilihan Anda (1-2): ")
-    if pilihan == '1': filtered_tasks = [t for t in data['tasks'] if t['status'] == 'Selesai']
-    elif pilihan == '2': filtered_tasks = [t for t in data['tasks'] if t['status'] == 'Belum Selesai']
-    else: console.print("[red]Pilihan tidak valid.[/red]"); return
-    tampilkan_tugas(list_tugas=filtered_tasks)
+            console.print("\n[bold red]Pilihan tidak valid.[/bold red]")
 
 if __name__ == "__main__":
     menu()
