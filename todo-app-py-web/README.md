@@ -1,7 +1,3 @@
-Tentu, ini adalah `README.md` yang telah diperbarui secara total untuk mencerminkan transformasi aplikasi Anda dari CLI menjadi **Aplikasi Web** berbasis **Flask**.
-
------
-
 # Aplikasi To-Do List Web v2.5 (Flask)
 
 Selamat datang di Aplikasi To-Do List Web\! Proyek ini merupakan evolusi dari aplikasi konsol (CLI) menjadi sebuah aplikasi web *full-stack* yang interaktif. Dibangun menggunakan framework **Flask** dan didukung oleh database **SQLite**, aplikasi ini memungkinkan Anda mengelola tugas harian melalui antarmuka browser yang bersih dan responsif.
@@ -164,9 +160,3 @@ Proyek ini telah berkembang pesat, namun masih banyak ruang untuk perbaikan dan 
   - [ ] **Pembaruan Dinamis (AJAX)**: Menggunakan JavaScript untuk menandai tugas selesai atau menambah sub-tugas tanpa perlu me-refresh seluruh halaman.
   - [ ] **Containerisasi dengan Docker**: Membungkus aplikasi ke dalam Docker container untuk mempermudah proses *deployment*.
   - [ ] **Deployment**: Menerbitkan aplikasi ke platform cloud seperti PythonAnywhere, Heroku, atau Vercel agar bisa diakses secara online.
-
------
-
-## 📜 Lisensi
-
-Proyek ini dilisensikan di bawah **MIT License**.
