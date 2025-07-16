@@ -180,7 +180,7 @@ Proyek ini masih bisa dikembangkan lebih lanjut\! Berikut adalah beberapa ide un
   - [x] **Sub-Tugas**: Kemampuan untuk menambahkan "sub-tugas" atau *checklist* di dalam sebuah tugas utama.
   - [x] **Unit Tests**: Menulis pengujian otomatis menggunakan `pytest` untuk memastikan setiap fungsi bekerja dengan benar.
   - [x] **Database**: Migrasi dari file JSON ke database yang lebih kuat seperti SQLite untuk skalabilitas yang lebih baik.
-  - [ ] **Antarmuka Web**: Membuat versi web dari aplikasi ini menggunakan framework seperti Flask atau FastAPI.
+  - [x] **Antarmuka Web**: Membuat versi web dari aplikasi ini menggunakan framework seperti Flask atau FastAPI.
   - [ ] **Paket Instalasi**: Mengemas aplikasi menjadi paket Python yang dapat diinstal melalui `pip`.
 
 
