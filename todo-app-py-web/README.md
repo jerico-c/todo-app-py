@@ -3,18 +3,6 @@
 Selamat datang di Aplikasi To-Do List Web\! Proyek ini merupakan evolusi dari aplikasi konsol (CLI) menjadi sebuah aplikasi web *full-stack* yang interaktif. Dibangun menggunakan framework **Flask** dan didukung oleh database **SQLite**, aplikasi ini memungkinkan Anda mengelola tugas harian melalui antarmuka browser yang bersih dan responsif.
 
 Proyek ini adalah studi kasus yang sangat baik untuk developer yang ingin bertransisi dari skrip sederhana ke pengembangan aplikasi web terstruktur dengan Python.
-
-### Tampilan Aplikasi
-
-\<p align="center"\>
-\<strong\>Halaman Utama\</strong\>\<br\>
-\<img src="https://www.google.com/search?q=https://i.imgur.com/K3Gq223.png" alt="Screenshot Halaman Utama Aplikasi To-Do List Web" width="800"/\>
-\</p\>
-\<p align="center"\>
-\<strong\>Halaman Detail & Edit Tugas\</strong\>\<br\>
-\<img src="https://www.google.com/search?q=https://i.imgur.com/tYtHkXg.png" alt="Screenshot Halaman Detail Tugas" width="800"/\>
-\</p\>
-
 -----
 
 ### navigasi
