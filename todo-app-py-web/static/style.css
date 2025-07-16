@@ -1,0 +1,35 @@
+/* file: static/style.css */
+
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background-color: #f8f9fa;
+}
+
+main {
+    flex: 1;
+}
+
+/* Mewarnai badge prioritas */
+.priority-tinggi {
+    background-color: #dc3545 !important;
+    color: white;
+}
+.priority-sedang {
+    background-color: #ffc107 !important;
+    color: black;
+}
+.priority-rendah {
+    background-color: #198754 !important;
+    color: white;
+}
+
+/* Style untuk tugas yang sudah selesai */
+.task-completed a, .task-completed span, .task-completed small {
+    text-decoration: line-through;
+    color: #6c757d !important;
+}
+.task-completed {
+    background-color: #e9ecef;
+}

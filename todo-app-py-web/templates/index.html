@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Daftar Tugas{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h2 class="card-title">Tambah Tugas Baru</h2>
+        <form action="{{ url_for('add_task') }}" method="post">
+            <div class="input-group">
+                <input type="text" name="title" class="form-control" placeholder="Apa yang perlu kamu lakukan?" required>
+                <select name="priority" class="form-select flex-grow-0 w-auto">
+                    <option value="Rendah">Rendah</option>
+                    <option value="Sedang" selected>Sedang</option>
+                    <option value="Tinggi">Tinggi</option>
+                </select>
+                <input type="datetime-local" name="due_date" class="form-control flex-grow-0 w-auto">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Tambah</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<h3>Daftar Tugas</h3>
+<div class="list-group">
+    {% for task in tasks %}
+    <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if task.status == 'Selesai' %}task-completed{% endif %}">
+        <div class="d-flex align-items-center">
+            <form action="{{ url_for('update_task_status', task_id=task.id) }}" method="post" class="me-3">
+                {% if task.status == 'Selesai' %}
+                    <input type="hidden" name="status" value="Belum Selesai">
+                    <button type="submit" class="btn btn-sm btn-link p-0"><i class="bi bi-check-circle-fill text-success fs-4"></i></button>
+                {% else %}
+                    <input type="hidden" name="status" value="Selesai">
+                    <button type="submit" class="btn btn-sm btn-link p-0"><i class="bi bi-circle text-secondary fs-4"></i></button>
+                {% endif %}
+            </form>
+
+            <div>
+                <a href="{{ url_for('task_detail', task_id=task.id) }}" class="text-decoration-none text-dark">
+                    <h5 class="mb-1">{{ task.title }}</h5>
+                </a>
+                <small class="text-muted">
+                    <span class="badge priority-{{ task.priority|lower }}">{{ task.priority }}</span>
+                    {% if task.due_date %}
+                        <span class="ms-2 {% if task.status != 'Selesai' and task.due_date|is_overdue %}text-danger fw-bold{% endif %}">
+                            <i class="bi bi-calendar-event"></i> {{ task.due_date|dt('%d %b %Y') }}
+                        </span>
+                    {% endif %}
+                    {% if task.total_sub > 0 %}
+                        <span class="ms-2">
+                            <i class="bi bi-check2-square"></i> {{ task.selesai_sub }}/{{ task.total_sub }}
+                        </span>
+                    {% endif %}
+                </small>
+            </div>
+        </div>
+        
+        <form action="{{ url_for('delete_task', task_id=task.id) }}" method="post" onsubmit="return confirm('Apakah Anda yakin ingin menghapus tugas ini?');">
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+        </form>
+    </div>
+    {% else %}
+    <div class="list-group-item text-center">
+        <p class="mb-0">🎉 Selamat! Tidak ada tugas yang perlu dikerjakan.</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
